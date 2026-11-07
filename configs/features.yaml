@@ -1,0 +1,26 @@
+# Configuración de variables del experimento.
+# El alias en 'seleccion' define el subconjunto de características utilizadas:
+#   - ALL: todas las variables (numéricas y categóricas).
+#   - NUMERIC: solo las variables numéricas.
+#   - CUSTOM: solo las variables definidas en la sección 'custom'.
+#
+# Cada ejecución registra en MLflow:
+#   - features: el alias usado (ALL, NUMERIC o CUSTOM)
+#   - n_features: el número total de variables utilizadas
+seleccion: ALL
+
+todas:
+  categoricas:
+    - marca
+    - tipo_vehiculo
+  numericas:
+    - año_modelo
+    - kilometraje
+    - precio_lista
+
+custom:
+  categoricas:
+    - marca
+  numericas:
+    - año_modelo
+    - precio_lista

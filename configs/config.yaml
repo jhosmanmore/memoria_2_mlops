@@ -1,10 +1,11 @@
-# Configuración central del proyecto.
-# Todos los scripts y flows leen de aquí: no hay rutas ni hiperparámetros escritos a mano en el código.
+# Configuración central del proyecto (Actividad 2).
+# Parámetros desacoplados del código fuente: datos, modelo, evaluación champion,
+# MLflow, inferencia por lotes, API y despliegues en Prefect.
 
 datos:
-  ruta: data/car_sales_dataset.csv   # relativa a la raíz del repositorio
-  num_registros: 20000               # filas del dataset sintético (15.000 a 30.000)
-  semilla: 42                        # misma semilla => mismo dataset en cada ejecución
+  ruta: data/car_sales_dataset.csv
+  num_registros: 20000
+  semilla: 42
   columnas_esperadas:
     - fecha_venta
     - marca
@@ -16,16 +17,38 @@ datos:
 
 modelo:
   objetivo: precio_venta
-  variables_categoricas: [marca, tipo_vehiculo]
-  variables_numericas: [año_modelo, kilometraje, precio_lista]
   tipo: random_forest                # random_forest | linear_regression
   hiperparametros:
-    n_estimators: 200
-    max_depth: 12
+    n_estimators: 220
+    max_depth: 11
     random_state: 42
   test_size: 0.2
   semilla_split: 42
 
+evaluacion:
+  metrica_champion: r2               # Métrica de negocio principal (r2 | rmse | mae)
+  umbral_minimo: 0.85                # Umbral mínimo requerido para ser candidato a champion
+  mejora_minima: 0.00001             # Margen de mejora requerido
+  modo: max
+
 mlflow:
-  experimento: precio-vehiculos-a1
-  nombre_run: rf-baseline
+  experimento: precio-vehiculos
+  nombre_modelo: precio-vehiculos-model
+  alias_champion: champion
+  nombre_run: rf-tuning-v4-nuevo-champion
+
+inferencia:
+  tamano_lote: 50                    # Filas simuladas para el lote diario
+  ruta_salida: data/predicciones     # Carpeta donde se guardan las predicciones
+  prefijo_archivo: predicciones      # Prefijo para el archivo con fecha: predicciones_YYYYMMDD_HHMMSS.csv
+
+api:
+  host: 0.0.0.0
+  port: 8000
+  titulo: API de Inferencia - Precio de Vehículos Usados
+  version: 0.2.0
+
+despliegues:
+  cron_inferencia: "0 2 * * *"       # Ejecución diaria a las 02:00 AM
+  nombre_entrenamiento: entrenamiento-despliegue
+  nombre_inferencia: inferencia-diaria-despliegue
