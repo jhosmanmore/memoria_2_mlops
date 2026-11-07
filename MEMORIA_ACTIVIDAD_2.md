@@ -1,5 +1,5 @@
 # MEMORIA ACTIVIDAD 2 – MLOps
-## Orquestación, Registro y Despliegue de Modelos con Prefect, MLflow y FastAPI
+## Pipeline y empaquetado
 
 **Maestría en Ciencia de Datos – Universidad Santo Tomás**  
 **Asignatura:** MLOps  
@@ -10,9 +10,9 @@
 
 ---
 
-## 1. Resumen Ejecutivo y Arquitectura
+## 1. Resumen Actividad y Arquitectura
 
-En esta Actividad 2 se implementó una arquitectura integral de MLOps para la orquestación, evaluación, registro y servicio del modelo de predicción de precios de vehículos usados. Se desacopló la lógica de experimentación de la infraestructura y el código, integrando:
+En esta Actividad 2 se implementó una arquitectura de MLOps para la orquestación, evaluación, registro y servicio del modelo de predicción de precios de vehículos usados realizando:
 
 1. **Prefect 3.8.8:** Orquestación de dos pipelines independientes:
    - **Pipeline de Entrenamiento:** Flujo de 4 pasos modulares (`ingesta` → `entrenamiento` → `evaluación` → `registro`).
@@ -22,7 +22,7 @@ En esta Actividad 2 se implementó una arquitectura integral de MLOps para la or
    - *Model Registry & Champion Logic:* Comparación del nuevo modelo con el modelo vigente. Solo se promueve y asigna el alias `champion` si supera el umbral mínimo configurado ($R^2 \ge 0.85$) y si mejora al champion vigente por al menos un margen delta. Si no lo supera, el run queda registrado pero el alias `champion` no cambia.
 3. **FastAPI & Uvicorn:**
    - Servicio REST en `services/api/main.py` y `src/api.py` que consume el modelo resuelto dinámicamente mediante el alias `champion` (`models:/precio-vehiculos-model@champion`).
-   - Comprobación del **Criterio de Éxito:** Al actualizar el champion en MLflow y reiniciar la API, ésta sirve la nueva versión del modelo sin modificar una sola línea de código.
+   - Comprobación: al actualizar el champion en MLflow y reiniciar la API, ésta sirve la nueva versión del modelo sin modificar líneas de código.
 4. **Configuración en YAML:**
    - `configs/config.yaml`: Centralización de hiperparámetros, umbrales de decisión, nombres de experimento, rutas y parámetros de despliegue.
    - `configs/features.yaml`: Selección dinámica del subconjunto de variables (`ALL`, `NUMERIC`, `CUSTOM`).
@@ -65,7 +65,7 @@ PROYECTO_DE_EQUIPO/
 
 ---
 
-## 2. Detalle de Entregables
+## 2. Entregables de la actividad
 
 ### Entregable 1: Pipeline de Entrenamiento en Prefect (`flows/entrenamiento_flow.py`)
 El pipeline implementa de forma explícita los 4 pasos solicitados:
@@ -111,17 +111,21 @@ El pipeline de inferencia por lotes:
 
 ---
 
-### Entregable 3: Conexión mediante MLflow y Lógica de Champion
+### Entregable 3: Conexión mediante MLflow y lógica de Champion
 
 La lógica está encapsulada en `src/champion.py`:
 - **Regla 1 (Umbral mínimo):** El modelo candidato debe alcanzar un valor mínimo de la métrica configurada ($R^2 \ge 0.85$ por defecto). Si no lo alcanza, es descartado para champion.
 - **Regla 2 (Primer modelo):** Si en MLflow Model Registry no existe un modelo previo con alias `champion`, el primer candidato que cumpla la Regla 1 recibe automáticamente el alias.
 - **Regla 3 (Competencia con Champion vigente):** Si ya existe un champion, se consulta su run de entrenamiento en MLflow para extraer su desempeño. El nuevo modelo **solo lo reemplaza** si:
-  $$R^2_{\text{nuevo}} - R^2_{\text{champion}} \ge \text{mejora\_minima}$$
+
+$$
+R^2_{\text{nuevo}} - R^2_{\text{champion}} \ge \text{mejora}
+$$
+
   Si no supera al champion, el run y la nueva versión quedan registrados en MLflow para auditoría, pero el alias `champion` **permanece intacto** en la versión anterior.
 - **Unicidad:** En MLflow, los alias asignados a un modelo registrado son únicos; asignar `champion` a una nueva versión desasigna automáticamente la versión anterior.
 
-#### Evidencia de Comparación de Versiones Registrada en Pruebas:
+#### Evidencia de comparación de versiones registrada en pruebas:
 | Versión | Configuración | $R^2$ Obtenido | Decisión Champion | Motivo Registrado en MLflow / Prefect |
 |---|---|---|---|---|
 | **v1** | RF (`n_estimators: 150, max_depth: 12`) | **0.9938** | **Promovido a Champion** | Primer modelo que supera el umbral mínimo ($0.9938 \ge 0.8500$). |
@@ -131,18 +135,18 @@ La lógica está encapsulada en `src/champion.py`:
 
 ---
 
-### Entregable 4: API de Inferencia con FastAPI (`services/api/main.py`)
+### Entregable 4: API de inferencia con FastAPI (`services/api/main.py`)
 
 La API sirve el modelo cargándolo directamente mediante su alias `champion`.
 
-#### Endpoints Implementados:
+#### Endpoints implementados:
 - `GET /`: Bienvenida y estado general.
 - `GET /health`: Monitoreo del estado (`healthy`) y versión activa del champion.
 - `GET /model-info`: Metadatos del modelo champion cargado en memoria (`run_id`, versión, estado).
 - `POST /predict`: Inferencia para un cliente individual con validación mediante Pydantic (`DatosVehiculo`).
 - `POST /predict/batch`: Inferencia para una lista de clientes en lote.
 
-#### Ejemplo de Predicción Documentada:
+#### Ejemplo de predicción:
 **Solicitud (`POST /predict`):**
 ```json
 {
@@ -164,14 +168,14 @@ La API sirve el modelo cargándolo directamente mediante su alias `champion`.
 }
 ```
 
-#### Comprobación del Criterio de Éxito:
+#### Comprobación del funcionamiento:
 1. Con el champion en **v1**, la API servía predicciones con `"modelo_version": "1"`.
 2. Se entrenó la versión **v4** que superó a v1, convirtiéndose en el nuevo `champion`.
 3. Al reiniciar la API (`scripts/verificar_api.py` o recarga de Uvicorn), la API comenzó inmediatamente a responder con `"modelo_version": "4"` sin tocar ningún archivo ni código fuente.
 
 ---
 
-### Entregable 5: Configuración Desacoplada en YAML
+### Entregable 5: Configuración separada en YAML
 
 #### `configs/features.yaml`:
 Permite configurar el subconjunto de variables sin alterar el código:
@@ -262,18 +266,17 @@ El script registra los dos despliegues independientes en el servidor de Prefect:
 - **Despliegue de Entrenamiento (`entrenamiento-despliegue`):** Lanzable a mano o bajo demanda.
 - **Despliegue de Inferencia (`inferencia-diaria-despliegue`):** Programado con horario cron diario (`0 2 * * *` = todos los días a las 02:00 AM).
 
-Los despliegues quedan visibles en la UI de Prefect (`http://localhost:4200/deployments`):
+Los despliegues quedan visibles en la UI de prefect (`http://localhost:4200/deployments`):
 - Deployment ID Entrenamiento: `df299c04-4939-427c-a55e-f0c6ca617f4b`
 - Deployment ID Inferencia: `8217d7ee-1d37-4cf0-a88a-5bf5cd2a64a5`
 
 ---
 
-## 3. Guía Paso a Paso: Comando por Comando para Replicar Todo en Local
+## 3. Ejecutar pasos de la actividad para replicar todo en local
 
-A continuación se presenta el procedimiento exacto para replicar desde cero toda la solución en Windows (PowerShell).
 
-### Paso 1: Configurar el Entorno y Dependencias
-Desde la raíz del repositorio (`PROYECTO_DE_EQUIPO`):
+### Paso 1: Configurar el entorno y dependencias
+Desde la raíz del repositorio:
 
 ```powershell
 # 1. Asegurar configuración local de Poetry para usar virtualenv interno del proyecto
@@ -287,7 +290,7 @@ poetry install
 poetry run python -c "import prefect, mlflow, sklearn, pandas, numpy, yaml, fastapi, uvicorn; print('Todos los paquetes OK')"
 ```
 
-### Paso 2: Ejecutar la Suite de Pruebas Unitarias
+### Paso 2: Ejecutar pruebas unitarias
 Ejecutar pytest para verificar que los componentes (datos, entrenamiento, features, champion y API) funcionen sin errores:
 
 ```powershell
@@ -297,7 +300,7 @@ poetry run pytest
 ```
 *Resultado esperado:* **23 passed**.
 
-### Paso 3: Levantar los Servicios Locales (MLflow y Prefect)
+### Paso 3: Levantar los servicios (MLflow y Prefect)
 En una terminal con Docker Desktop abierto:
 
 ```powershell
@@ -310,8 +313,7 @@ cd ..
 - MLflow Tracking & Registry: [http://localhost:5000](http://localhost:5000)
 - Prefect UI & API: [http://localhost:4200](http://localhost:4200)
 
-### Paso 4: Definir Variables de Entorno en Cada Terminal de Trabajo
-En cualquier terminal PowerShell donde se ejecuten flows o la API, definir:
+### Paso 4: Definir variables de entorno en cada terminal de trabajo
 
 ```powershell
 $env:PREFECT_API_URL = "http://localhost:4200/api"
@@ -320,15 +322,15 @@ $env:PYTHONIOENCODING = "utf-8"
 $env:PYTHONUTF8 = "1"
 ```
 
-> **Nota técnica importante para Windows:** Las variables `$env:PYTHONIOENCODING = "utf-8"` y `$env:PYTHONUTF8 = "1"` son indispensables para prevenir el error `UnicodeEncodeError: 'charmap'` ocasionado por los emojis que MLflow imprime por consola al finalizar un run.
+> **Nota: ** Las variables `$env:PYTHONIOENCODING = "utf-8"` y `$env:PYTHONUTF8 = "1"` evitan el error `UnicodeEncodeError: 'charmap'`.
 
-### Paso 5: Validar Conectividad con el Flow de Prueba
+### Paso 5: Validar conectividad con el flow de prueba
 ```powershell
 poetry run python flows/prueba_flow.py
 ```
 *Resultado esperado:* Prefect registra el run en estado `Completed` y MLflow registra el experimento `prueba-validacion`.
 
-### Paso 6: Ejecutar el Pipeline de Entrenamiento
+### Paso 6: Ejecutar el pipeline de entrenamiento
 ```powershell
 poetry run python flows/entrenamiento_flow.py
 ```
@@ -351,17 +353,17 @@ poetry run python flows/inferencia_flow.py
 - En MLflow: Aparece un run en `precio-vehiculos` con tag `fase = inferencia` y el CSV como artefacto.
 - En Prefect: Aparece el run en estado `Completed` y el artefacto visual `resumen-inferencia`.
 
-### Paso 8: Desplegar los Flows en Prefect
+### Paso 8: Desplegar los flows en prefect
 ```powershell
 poetry run python flows/desplegar.py
 ```
 *Comprobación:*
 - Entrar a [http://localhost:4200/deployments](http://localhost:4200/deployments).
-- Deben aparecer dos despliegues:
+- aparecen dos despliegues:
   1. `entrenamiento-precio-vehiculos/entrenamiento-despliegue` (Manual).
   2. `inferencia-precio-vehiculos/inferencia-diaria-despliegue` (Horario: `0 2 * * *`).
 
-### Paso 9: Iniciar y Probar la API de Inferencia (FastAPI)
+### Paso 9: Iniciar y probar la API de inferencia (FastAPI)
 
 #### Iniciar el servidor de la API:
 En una terminal con las variables de entorno configuradas:
@@ -369,7 +371,7 @@ En una terminal con las variables de entorno configuradas:
 poetry run uvicorn services.api.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-#### Probar la API desde otra terminal (o usando el script cliente):
+#### Probar la API desde otra terminal:
 ```powershell
 poetry run python scripts/verificar_api.py
 ```
@@ -382,7 +384,7 @@ curl -X POST "http://localhost:8000/predict" `
 ```
 *Respuesta esperada:* Código 200 con el precio estimado y metadatos del champion (`modelo_version`, `modelo_alias`).
 
-### Paso 10: Comprobar el Criterio de Éxito (Actualización del Champion y Reinicio de la API)
+### Paso 10: Comprobar el funcionamiento (Actualización del champion y reinicio de la API)
 1. Modificar un hiperparámetro en `configs/config.yaml` (por ejemplo, cambiar `n_estimators` o `max_depth`) o cambiar `seleccion` en `configs/features.yaml`.
 2. Volver a ejecutar el flow de entrenamiento:
    ```powershell
@@ -394,8 +396,3 @@ curl -X POST "http://localhost:8000/predict" `
 
 ---
 
-## 4. Conclusiones
-La solución desarrollada satisface con rigor todos los requisitos teóricos y prácticos de la Actividad 2:
-- Los flujos en Prefect aseguran la modularidad y observabilidad del ciclo de vida.
-- MLflow garantiza la gobernanza de modelos y la trazabilidad de experimentos.
-- El desacoplamiento en YAML y el mecanismo de alias `champion` permiten desplegar mejoras continuas en producción de forma ágil y segura.
